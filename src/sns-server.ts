@@ -300,6 +300,7 @@ export class SNSServer implements ISNSServer {
     const sqs = new SQSClient({ endpoint: sqsEndpoint, region: this.region });
 
     if (sub["Attributes"]["RawMessageDelivery"] === "true") {
+      this.debug("raw event: " + JSON.stringify(event));
       const sendMsgReq = new SendMessageCommand({
         QueueUrl: sub.Endpoint,
         MessageBody: event,
@@ -313,8 +314,10 @@ export class SNSServer implements ISNSServer {
           });
       });
     } else {
+      this.debug("parsing json: " + event);
       const records = JSON.parse(event).Records ?? [];
       const messagePromises = records.map((record) => {
+        this.debug("record sns: " + JSON.stringify(record.Sns));
         const sendMsgReq = new SendMessageCommand({
           QueueUrl: sub.Endpoint,
           MessageBody: JSON.stringify(record.Sns),
@@ -325,7 +328,13 @@ export class SNSServer implements ISNSServer {
           sqs
             .send(sendMsgReq).then(() => {
               resolve();
-            });
+            }).catch(e => {
+              console.log('e', e);
+              console.log('e.$response', ...Object.keys(e.$response));
+              console.log('e.$response.body', ...Object.keys(e.$response.body));
+              console.log('e.$response.body.req.res', ...Object.keys(e.$response.body.req.res || {}));
+              throw e;
+          });
         });
       });
       return new Promise<void>((resolve, reject) => {
@@ -446,4 +455,17 @@ export class SNSServer implements ISNSServer {
     }
     this.pluginDebug(msg, "server");
   }
+}
+
+function getBody(request) {
+  return new Promise((resolve) => {
+    const bodyParts = [];
+    let body;
+    request.on('data', (chunk) => {
+      bodyParts.push(chunk);
+    }).on('end', () => {
+      body = Buffer.concat(bodyParts).toString();
+      resolve(body)
+    });
+  });
 }
