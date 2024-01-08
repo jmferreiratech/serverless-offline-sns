@@ -1,384 +1,262 @@
-"use strict";
-var __assign = (this && this.__assign) || function () {
-    __assign = Object.assign || function(t) {
-        for (var s, i = 1, n = arguments.length; i < n; i++) {
-            s = arguments[i];
-            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
-                t[p] = s[p];
-        }
-        return t;
-    };
-    return __assign.apply(this, arguments);
-};
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
-var __generator = (this && this.__generator) || function (thisArg, body) {
-    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
-    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
-    function verb(n) { return function (v) { return step([n, v]); }; }
-    function step(op) {
-        if (f) throw new TypeError("Generator is already executing.");
-        while (_) try {
-            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
-            if (y = 0, t) op = [op[0] & 2, t.value];
-            switch (op[0]) {
-                case 0: case 1: t = op; break;
-                case 4: _.label++; return { value: op[1], done: false };
-                case 5: _.label++; y = op[1]; op = [0]; continue;
-                case 7: op = _.ops.pop(); _.trys.pop(); continue;
-                default:
-                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
-                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
-                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
-                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
-                    if (t[2]) _.ops.pop();
-                    _.trys.pop(); continue;
-            }
-            op = body.call(thisArg, _);
-        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
-        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
-    }
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.SNSAdapter = void 0;
-var AWS = require("aws-sdk");
-var _ = require("lodash");
-var node_fetch_1 = require("node-fetch");
-var helpers_1 = require("./helpers");
-var SNSAdapter = /** @class */ (function () {
-    function SNSAdapter(localPort, remotePort, region, snsEndpoint, debug, app, serviceName, stage, accountId, host, subscribeEndpoint) {
-        var _this = this;
-        this.Deferred = new Promise(function (res) { return (_this.sent = res); });
+import { SNSClient, ListTopicsCommand, ListSubscriptionsCommand, UnsubscribeCommand, CreateTopicCommand, SubscribeCommand, PublishCommand } from "@aws-sdk/client-sns";
+import _ from "lodash";
+import fetch from "node-fetch";
+import { createMessageId, createSnsLambdaEvent } from "./helpers.js";
+export class SNSAdapter {
+    sns;
+    pluginDebug;
+    port;
+    server;
+    app;
+    serviceName;
+    stage;
+    endpoint;
+    adapterEndpoint;
+    baseSubscribeEndpoint;
+    accountId;
+    constructor(localPort, remotePort, region, snsEndpoint, debug, app, serviceName, stage, accountId, host, subscribeEndpoint) {
         this.pluginDebug = debug;
         this.app = app;
         this.serviceName = serviceName;
         this.stage = stage;
-        this.adapterEndpoint = "http://".concat(host || "127.0.0.1", ":").concat(localPort);
+        this.adapterEndpoint = `http://${host || "127.0.0.1"}:${localPort}`;
         this.baseSubscribeEndpoint = subscribeEndpoint
-            ? "http://".concat(subscribeEndpoint, ":").concat(remotePort)
+            ? `http://${subscribeEndpoint}:${remotePort}`
             : this.adapterEndpoint;
-        this.endpoint = snsEndpoint || "http://127.0.0.1:".concat(localPort);
+        this.endpoint = snsEndpoint || `http://127.0.0.1:${localPort}`;
         this.debug("using endpoint: " + this.endpoint);
         this.accountId = accountId;
-        if (!AWS.config.credentials) {
-            AWS.config.update({
+        this.sns = new SNSClient({
+            credentials: {
                 accessKeyId: "AKID",
                 secretAccessKey: "SECRET",
-                region: region,
-            });
-        }
-        this.sns = new AWS.SNS({
+            },
             endpoint: this.endpoint,
-            region: region,
+            region,
         });
     }
-    SNSAdapter.prototype.listTopics = function () {
-        return __awaiter(this, void 0, void 0, function () {
-            var req;
-            var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        this.debug("listing topics");
-                        req = this.sns.listTopics({});
-                        this.debug(JSON.stringify(req.httpRequest));
-                        return [4 /*yield*/, new Promise(function (res) {
-                                _this.sns.listTopics({}, function (err, topics) {
-                                    if (err) {
-                                        _this.debug(err, err.stack);
-                                    }
-                                    else {
-                                        _this.debug(JSON.stringify(topics));
-                                    }
-                                    res(topics);
-                                });
-                            })];
-                    case 1: return [2 /*return*/, _a.sent()];
+    async listTopics() {
+        this.debug("listing topics");
+        const req = new ListTopicsCommand({});
+        this.debug(JSON.stringify(req.input));
+        return await new Promise((res) => {
+            this.sns.send(req, (err, topics) => {
+                if (err) {
+                    this.debug(err, err.stack);
                 }
-            });
-        });
-    };
-    SNSAdapter.prototype.listSubscriptions = function () {
-        return __awaiter(this, void 0, void 0, function () {
-            var req;
-            var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        this.debug("listing subs");
-                        req = this.sns.listSubscriptions({});
-                        this.debug(JSON.stringify(req.httpRequest));
-                        return [4 /*yield*/, new Promise(function (res) {
-                                _this.sns.listSubscriptions({}, function (err, subs) {
-                                    if (err) {
-                                        _this.debug(err, err.stack);
-                                    }
-                                    else {
-                                        _this.debug(JSON.stringify(subs));
-                                    }
-                                    res(subs);
-                                });
-                            })];
-                    case 1: return [2 /*return*/, _a.sent()];
+                else {
+                    this.debug(JSON.stringify(topics));
                 }
+                res(topics);
             });
         });
-    };
-    SNSAdapter.prototype.unsubscribe = function (arn) {
-        return __awaiter(this, void 0, void 0, function () {
-            var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        this.debug("unsubscribing: " + arn);
-                        return [4 /*yield*/, new Promise(function (res) {
-                                _this.sns.unsubscribe({
-                                    SubscriptionArn: arn,
-                                }, function (err, data) {
-                                    if (err) {
-                                        _this.debug(err, err.stack);
-                                    }
-                                    else {
-                                        _this.debug("unsubscribed: " + JSON.stringify(data));
-                                    }
-                                    res(true);
-                                });
-                            })];
-                    case 1:
-                        _a.sent();
-                        return [2 /*return*/];
+    }
+    async listSubscriptions() {
+        this.debug("listing subs");
+        const req = new ListSubscriptionsCommand({});
+        this.debug(JSON.stringify(req.input));
+        return await new Promise((res) => {
+            this.sns.send(req, (err, subs) => {
+                if (err) {
+                    this.debug(err, err.stack);
                 }
-            });
-        });
-    };
-    SNSAdapter.prototype.createTopic = function (topicName) {
-        return __awaiter(this, void 0, void 0, function () {
-            var _this = this;
-            return __generator(this, function (_a) {
-                return [2 /*return*/, new Promise(function (res) {
-                        return _this.sns.createTopic({ Name: topicName }, function (err, data) {
-                            if (err) {
-                                _this.debug(err, err.stack);
-                            }
-                            else {
-                                _this.debug("arn: " + JSON.stringify(data));
-                            }
-                            res(data);
-                        });
-                    })];
-            });
-        });
-    };
-    SNSAdapter.prototype.subscribe = function (fn, getHandler, arn, snsConfig) {
-        return __awaiter(this, void 0, void 0, function () {
-            var subscribeEndpoint, params;
-            var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        arn = this.convertPseudoParams(arn);
-                        subscribeEndpoint = this.baseSubscribeEndpoint + "/" + fn.name;
-                        this.debug("subscribe: " + fn.name + " " + arn);
-                        this.debug("subscribeEndpoint: " + subscribeEndpoint);
-                        this.app.post("/" + fn.name, function (req, res) {
-                            _this.debug("calling fn: " + fn.name + " 1");
-                            var oldEnv = _.extend({}, process.env);
-                            process.env = _.extend({}, process.env, fn.environment);
-                            var event = req.body;
-                            if (req.is("text/plain") && req.get("x-amz-sns-rawdelivery") !== "true") {
-                                var msg = event.MessageStructure === "json"
-                                    ? JSON.parse(event.Message).default
-                                    : event.Message;
-                                event = (0, helpers_1.createSnsLambdaEvent)(event.TopicArn, "EXAMPLE", event.Subject || "", msg, event.MessageId || (0, helpers_1.createMessageId)(), event.MessageAttributes || {}, event.MessageGroupId);
-                            }
-                            if (req.body.SubscribeURL) {
-                                _this.debug("Visiting subscribe url: " + req.body.SubscribeURL);
-                                return (0, node_fetch_1.default)(req.body.SubscribeURL, {
-                                    method: "GET",
-                                    timeout: 0,
-                                }).then(function (fetchResponse) { return _this.debug("Subscribed: " + fetchResponse); });
-                            }
-                            var sendIt = function (err, response) {
-                                process.env = oldEnv;
-                                if (err) {
-                                    res.status(500).send(err);
-                                    _this.sent(err);
-                                }
-                                else {
-                                    res.send(response);
-                                    _this.sent(response);
-                                }
-                            };
-                            var maybePromise = getHandler()(event, _this.createLambdaContext(fn, sendIt), sendIt);
-                            if (maybePromise && maybePromise.then) {
-                                maybePromise
-                                    .then(function (response) { return sendIt(null, response); })
-                                    .catch(function (error) { return sendIt(error, null); });
-                            }
-                        });
-                        params = {
-                            Protocol: snsConfig.protocol || "http",
-                            TopicArn: arn,
-                            Endpoint: subscribeEndpoint,
-                            Attributes: {},
-                        };
-                        if (snsConfig.rawMessageDelivery === "true") {
-                            params.Attributes["RawMessageDelivery"] = "true";
-                        }
-                        if (snsConfig.filterPolicy) {
-                            params.Attributes["FilterPolicy"] = JSON.stringify(snsConfig.filterPolicy);
-                        }
-                        return [4 /*yield*/, new Promise(function (res) {
-                                _this.sns.subscribe(params, function (err, data) {
-                                    if (err) {
-                                        _this.debug(err, err.stack);
-                                    }
-                                    else {
-                                        _this.debug("successfully subscribed fn \"".concat(fn.name, "\" to topic: \"").concat(arn, "\""));
-                                    }
-                                    res(true);
-                                });
-                            })];
-                    case 1:
-                        _a.sent();
-                        return [2 /*return*/];
+                else {
+                    this.debug(JSON.stringify(subs));
                 }
+                res(subs);
             });
         });
-    };
-    SNSAdapter.prototype.subscribeQueue = function (queueUrl, arn, snsConfig) {
-        return __awaiter(this, void 0, void 0, function () {
-            var params;
-            var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        arn = this.convertPseudoParams(arn);
-                        this.debug("subscribe: " + queueUrl + " " + arn);
-                        params = {
-                            Protocol: snsConfig.protocol || "sqs",
-                            TopicArn: arn,
-                            Endpoint: queueUrl,
-                            Attributes: {},
-                        };
-                        if (snsConfig.rawMessageDelivery === "true") {
-                            params.Attributes["RawMessageDelivery"] = "true";
-                        }
-                        if (snsConfig.filterPolicy) {
-                            params.Attributes["FilterPolicy"] = JSON.stringify(snsConfig.filterPolicy);
-                        }
-                        return [4 /*yield*/, new Promise(function (res) {
-                                _this.sns.subscribe(params, function (err, data) {
-                                    if (err) {
-                                        _this.debug(err, err.stack);
-                                    }
-                                    else {
-                                        _this.debug("successfully subscribed queue \"".concat(queueUrl, "\" to topic: \"").concat(arn, "\""));
-                                    }
-                                    res(true);
-                                });
-                            })];
-                    case 1:
-                        _a.sent();
-                        return [2 /*return*/];
+    }
+    async unsubscribe(arn) {
+        this.debug("unsubscribing: " + arn);
+        const unsubscribeReq = new UnsubscribeCommand({ SubscriptionArn: arn });
+        await new Promise((res) => {
+            this.sns.send(unsubscribeReq, (err, data) => {
+                if (err) {
+                    this.debug(err, err.stack);
                 }
+                else {
+                    this.debug("unsubscribed: " + JSON.stringify(data));
+                }
+                res(true);
             });
         });
-    };
-    SNSAdapter.prototype.convertPseudoParams = function (topicArn) {
-        var awsRegex = /#{AWS::([a-zA-Z]+)}/g;
+    }
+    async createTopic(topicName) {
+        const createTopicReq = new CreateTopicCommand({ Name: topicName });
+        return new Promise((res) => this.sns.send(createTopicReq, (err, data) => {
+            if (err) {
+                this.debug(err, err.stack);
+            }
+            else {
+                this.debug("arn: " + JSON.stringify(data));
+            }
+            res(data);
+        }));
+    }
+    sent;
+    Deferred = new Promise((res) => (this.sent = res));
+    async subscribe(fn, getHandler, arn, snsConfig) {
+        arn = this.convertPseudoParams(arn);
+        const subscribeEndpoint = this.baseSubscribeEndpoint + "/" + fn.name;
+        this.debug("subscribe: " + fn.name + " " + arn);
+        this.debug("subscribeEndpoint: " + subscribeEndpoint);
+        this.app.post("/" + fn.name, (req, res) => {
+            this.debug("calling fn: " + fn.name + " 1");
+            const oldEnv = _.extend({}, process.env);
+            process.env = _.extend({}, process.env, fn.environment);
+            let event = req.body;
+            if (req.is("text/plain") && req.get("x-amz-sns-rawdelivery") !== "true") {
+                const msg = event.MessageStructure === "json"
+                    ? JSON.parse(event.Message).default
+                    : event.Message;
+                event = createSnsLambdaEvent(event.TopicArn, "EXAMPLE", event.Subject || "", msg, event.MessageId || createMessageId(), event.MessageAttributes || {}, event.MessageGroupId);
+            }
+            if (req.body.SubscribeURL) {
+                this.debug("Visiting subscribe url: " + req.body.SubscribeURL);
+                return fetch(req.body.SubscribeURL, {
+                    method: "GET"
+                }).then((fetchResponse) => this.debug("Subscribed: " + fetchResponse));
+            }
+            const sendIt = (err, response) => {
+                process.env = oldEnv;
+                if (err) {
+                    res.status(500).send(err);
+                    this.sent(err);
+                }
+                else {
+                    res.send(response);
+                    this.sent(response);
+                }
+            };
+            const maybePromise = getHandler(event, this.createLambdaContext(fn, sendIt), sendIt);
+            if (maybePromise && maybePromise.then) {
+                maybePromise
+                    .then((response) => sendIt(null, response))
+                    .catch((error) => sendIt(error, null));
+            }
+        });
+        const params = {
+            Protocol: snsConfig.protocol || "http",
+            TopicArn: arn,
+            Endpoint: subscribeEndpoint,
+            Attributes: {},
+        };
+        if (snsConfig.rawMessageDelivery === "true") {
+            params.Attributes["RawMessageDelivery"] = "true";
+        }
+        if (snsConfig.filterPolicy) {
+            params.Attributes["FilterPolicy"] = JSON.stringify(snsConfig.filterPolicy);
+        }
+        const subscribeRequest = new SubscribeCommand(params);
+        await new Promise((res) => {
+            this.sns.send(subscribeRequest, (err, data) => {
+                if (err) {
+                    this.debug(err, err.stack);
+                }
+                else {
+                    this.debug(`successfully subscribed fn "${fn.name}" to topic: "${arn}"`);
+                }
+                res(true);
+            });
+        });
+    }
+    async subscribeQueue(queueUrl, arn, snsConfig) {
+        arn = this.convertPseudoParams(arn);
+        this.debug("subscribe: " + queueUrl + " " + arn);
+        const params = {
+            Protocol: snsConfig.protocol || "sqs",
+            TopicArn: arn,
+            Endpoint: queueUrl,
+            Attributes: {},
+        };
+        if (snsConfig.rawMessageDelivery === "true") {
+            params.Attributes["RawMessageDelivery"] = "true";
+        }
+        if (snsConfig.filterPolicy) {
+            params.Attributes["FilterPolicy"] = JSON.stringify(snsConfig.filterPolicy);
+        }
+        const subscribeRequest = new SubscribeCommand(params);
+        await new Promise((res) => {
+            this.sns.send(subscribeRequest, (err, data) => {
+                if (err) {
+                    this.debug(err, err.stack);
+                }
+                else {
+                    this.debug(`successfully subscribed queue "${queueUrl}" to topic: "${arn}"`);
+                }
+                res(true);
+            });
+        });
+    }
+    convertPseudoParams(topicArn) {
+        const awsRegex = /#{AWS::([a-zA-Z]+)}/g;
         return topicArn.replace(awsRegex, this.accountId);
-    };
-    SNSAdapter.prototype.publish = function (topicArn, message, type, messageAttributes, subject, messageGroupId) {
-        if (type === void 0) { type = ""; }
-        if (messageAttributes === void 0) { messageAttributes = {}; }
-        if (subject === void 0) { subject = ""; }
-        return __awaiter(this, void 0, void 0, function () {
-            var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        topicArn = this.convertPseudoParams(topicArn);
-                        return [4 /*yield*/, new Promise(function (resolve, reject) {
-                                return _this.sns.publish(__assign({ Message: message, Subject: subject, MessageStructure: type, TopicArn: topicArn, MessageAttributes: messageAttributes }, (messageGroupId && { MessageGroupId: messageGroupId })), function (err, result) {
-                                    resolve(result);
-                                });
-                            })];
-                    case 1: return [2 /*return*/, _a.sent()];
-                }
-            });
+    }
+    async publish(topicArn, message, type = "", messageAttributes = {}, subject = "", messageGroupId) {
+        topicArn = this.convertPseudoParams(topicArn);
+        const publishReq = new PublishCommand({
+            Message: message,
+            Subject: subject,
+            MessageStructure: type,
+            TopicArn: topicArn,
+            MessageAttributes: messageAttributes,
+            ...(messageGroupId && { MessageGroupId: messageGroupId }),
         });
-    };
-    SNSAdapter.prototype.publishToTargetArn = function (targetArn, message, type, messageAttributes, messageGroupId) {
-        if (type === void 0) { type = ""; }
-        if (messageAttributes === void 0) { messageAttributes = {}; }
-        return __awaiter(this, void 0, void 0, function () {
-            var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        targetArn = this.convertPseudoParams(targetArn);
-                        return [4 /*yield*/, new Promise(function (resolve, reject) {
-                                return _this.sns.publish(__assign({ Message: message, MessageStructure: type, TargetArn: targetArn, MessageAttributes: messageAttributes }, (messageGroupId && { MessageGroupId: messageGroupId })), function (err, result) {
-                                    resolve(result);
-                                });
-                            })];
-                    case 1: return [2 /*return*/, _a.sent()];
-                }
-            });
+        return await new Promise((resolve, reject) => this.sns.send(publishReq, (err, result) => {
+            resolve(result);
+        }));
+    }
+    async publishToTargetArn(targetArn, message, type = "", messageAttributes = {}, messageGroupId) {
+        targetArn = this.convertPseudoParams(targetArn);
+        const publishReq = new PublishCommand({
+            Message: message,
+            MessageStructure: type,
+            TargetArn: targetArn,
+            MessageAttributes: messageAttributes,
+            ...(messageGroupId && { MessageGroupId: messageGroupId }),
         });
-    };
-    SNSAdapter.prototype.publishToPhoneNumber = function (phoneNumber, message, type, messageAttributes, messageGroupId) {
-        if (type === void 0) { type = ""; }
-        if (messageAttributes === void 0) { messageAttributes = {}; }
-        return __awaiter(this, void 0, void 0, function () {
-            var _this = this;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0: return [4 /*yield*/, new Promise(function (resolve, reject) {
-                            return _this.sns.publish(__assign({ Message: message, MessageStructure: type, PhoneNumber: phoneNumber, MessageAttributes: messageAttributes }, (messageGroupId && { MessageGroupId: messageGroupId })), function (err, result) {
-                                resolve(result);
-                            });
-                        })];
-                    case 1: return [2 /*return*/, _a.sent()];
-                }
-            });
+        return await new Promise((resolve, reject) => this.sns.send(publishReq, (err, result) => {
+            resolve(result);
+        }));
+    }
+    async publishToPhoneNumber(phoneNumber, message, type = "", messageAttributes = {}, messageGroupId) {
+        const publishReq = new PublishCommand({
+            Message: message,
+            MessageStructure: type,
+            PhoneNumber: phoneNumber,
+            MessageAttributes: messageAttributes,
+            ...(messageGroupId && { MessageGroupId: messageGroupId }),
         });
-    };
-    SNSAdapter.prototype.debug = function (msg, stack) {
+        return await new Promise((resolve, reject) => this.sns.send(publishReq, (err, result) => {
+            resolve(result);
+        }));
+    }
+    debug(msg, stack) {
         this.pluginDebug(msg, "adapter");
-    };
-    SNSAdapter.prototype.createLambdaContext = function (fun, cb) {
-        var functionName = "".concat(this.serviceName, "-").concat(this.stage, "-").concat(fun.name);
-        var endTime = new Date().getTime() + (fun.timeout ? fun.timeout * 1000 : 6000);
-        var done = typeof cb === "function" ? cb : function (x, y) { return x || y; }; // eslint-disable-line no-extra-parens
+    }
+    createLambdaContext(fun, cb) {
+        const functionName = `${this.serviceName}-${this.stage}-${fun.name}`;
+        const endTime = new Date().getTime() + (fun.timeout ? fun.timeout * 1000 : 6000);
+        const done = typeof cb === "function" ? cb : (x, y) => x || y; // eslint-disable-line no-extra-parens
         return {
             /* Methods */
-            done: done,
-            succeed: function (res) { return done(null, res); },
-            fail: function (err) { return done(err, null); },
-            getRemainingTimeInMillis: function () { return endTime - new Date().getTime(); },
+            done,
+            succeed: (res) => done(null, res),
+            fail: (err) => done(err, null),
+            getRemainingTimeInMillis: () => endTime - new Date().getTime(),
             /* Properties */
-            functionName: functionName,
+            functionName,
             memoryLimitInMB: fun.memorySize || 1536,
-            functionVersion: "offline_functionVersion_for_".concat(functionName),
-            invokedFunctionArn: "offline_invokedFunctionArn_for_".concat(functionName),
-            awsRequestId: "offline_awsRequestId_".concat(Math.random()
+            functionVersion: `offline_functionVersion_for_${functionName}`,
+            invokedFunctionArn: `offline_invokedFunctionArn_for_${functionName}`,
+            awsRequestId: `offline_awsRequestId_${Math.random()
                 .toString(10)
-                .slice(2)),
-            logGroupName: "offline_logGroupName_for_".concat(functionName),
-            logStreamName: "offline_logStreamName_for_".concat(functionName),
+                .slice(2)}`,
+            logGroupName: `offline_logGroupName_for_${functionName}`,
+            logStreamName: `offline_logStreamName_for_${functionName}`,
             identity: {},
             clientContext: {},
         };
-    };
-    return SNSAdapter;
-}());
-exports.SNSAdapter = SNSAdapter;
+    }
+}
